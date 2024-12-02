@@ -1,0 +1,123 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+
+# Load dataset
+transform = transforms.Compose([transforms.ToTensor()])
+train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+# Define a simple neural network
+class SimpleNN(nn.Module):
+    def __init__(self):
+        super(SimpleNN, self).__init__()
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(28 * 28, 256),
+            nn.ReLU(),
+            nn.Linear(256, 10)
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+
+# FGSM attack function
+def fgsm_attack(model, images, labels, epsilon):
+    images.requires_grad = True
+    outputs = model(images)
+    loss = nn.CrossEntropyLoss()(outputs, labels)
+    model.zero_grad()
+    loss.backward()
+    perturbed_images = images + epsilon * images.grad.sign()
+    return perturbed_images.clamp(0, 1)
+
+# Train with adversarial examples
+def adversarial_training(model, train_loader, epochs, epsilon):
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    model.train()
+    for epoch in range(epochs):
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
+            optimizer.zero_grad()
+
+            # Generate adversarial examples
+            adv_images = fgsm_attack(model, images, labels, epsilon)
+            
+            # Forward pass with adversarial examples
+            outputs = model(adv_images)
+            loss = nn.CrossEntropyLoss()(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
+
+# Initialize and train the model
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = SimpleNN().to(device)
+adversarial_training(model, train_loader, epochs=5, epsilon=0.2)
+import numpy as np
+from scipy.spatial import distance
+
+def compute_tangent_distance(image1, image2, tangents):
+    """
+    Compute tangent distance between two images.
+    :param image1: First image as a 1D array
+    :param image2: Second image as a 1D array
+    :param tangents: List of tangent vectors representing transformations
+    """
+    image_diff = image1 - image2
+    tangent_matrix = np.vstack(tangents).T
+    weights = np.linalg.pinv(tangent_matrix) @ image_diff
+    projection = tangent_matrix @ weights
+    residual = image_diff - projection
+    return np.linalg.norm(residual)
+
+# Example usage
+image1 = np.random.rand(784)  # Simulated 28x28 flattened image
+image2 = np.random.rand(784)
+tangents = [np.random.rand(784) for _ in range(4)]  # Random tangent vectors
+dist = compute_tangent_distance(image1, image2, tangents)
+print(f"Tangent Distance: {dist}")
+def tangent_loss(model, images, tangents):
+    """
+    Compute tangent propagation loss.
+    :param model: Neural network model
+    :param images: Input images
+    :param tangents: List of tangent vectors
+    """
+    images.requires_grad = True
+    outputs = model(images)
+    tangent_losses = []
+    for tangent in tangents:
+        tangent = tangent.to(images.device)
+        tangent_loss = (outputs * tangent).sum()
+        tangent_losses.append(tangent_loss)
+    return torch.stack(tangent_losses).mean()
+
+# Tangent propagation training
+def tangent_propagation_training(model, train_loader, tangents, epochs):
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    model.train()
+    for epoch in range(epochs):
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
+            optimizer.zero_grad()
+
+            # Standard loss
+            outputs = model(images)
+            loss = nn.CrossEntropyLoss()(outputs, labels)
+            
+            # Add tangent propagation loss
+            t_loss = tangent_loss(model, images, tangents)
+            total_loss = loss + t_loss
+            total_loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch + 1}, Loss: {total_loss.item()}")
+
+# Example tangents (simulate random transformations)
+example_tangents = [torch.rand_like(images[0]) for _ in range(4)]
+
+# Train with tangent propagation
+tangent_propagation_training(model, train_loader, example_tangents, epochs=5)
