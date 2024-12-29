@@ -1,0 +1,79 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.datasets import imdb
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout
+# Load IMDb dataset
+max_features = 10000
+maxlen = 200 # Cut reviews after 200 words
+# Load the IMDb dataset with original words
+(x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=max_features)
+# Get the word index mapping
+word_index = imdb.get_word_index()
+# Invert the word index mapping to map indices to words
+index_to_word = {idx: word for word, idx in word_index.items()}
+# Display the dataset
+print("IMDb Dataset Sample:")
+for i in range(5): # Print the first 5 samples
+# Convert word indices back to words
+words = [index_to_word.get(idx, '?') for idx in x_train[i]]
+review_text = ' '.join(words)
+# Print the review text and sentiment label
+print("Review", i+1, ":", review_text)
+print("Sentiment:", y_train[i])
+print()
+x_train = pad_sequences(x_train, maxlen=maxlen)
+x_test = pad_sequences(x_test, maxlen=maxlen)
+# Define the model
+embedding_dim = 50
+model = Sequential()
+
+
+model.add(Embedding(input_dim=max_features,output_dim=embedding_dim,
+input_length=maxlen))
+model.add(LSTM(units=64, dropout=0.2, recurrent_dropout=0.2))
+model.add(Dense(units=1, activation='sigmoid'))
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+# Train the model
+history = model.fit(x_train, y_train, epochs=5, batch_size=128, validation_split=0.2)
+# Evaluate the model
+loss, accuracy = model.evaluate(x_test, y_test)
+print('Test accuracy:', accuracy)
+# Test with new data
+def predict_sentiment(text):
+# Tokenize and pad the input text
+word_to_index = imdb.get_word_index()
+words = text.split()
+sequence = [word_to_index[word] if word in word_to_index and word_to_index[word] <
+max_features else 0 for word in words]
+sequence = pad_sequences([sequence], maxlen=maxlen)
+# Predict sentiment
+prediction = model.predict(sequence)[0][0]
+return prediction
+# Example usage
+positive_text = "This movie was fantastic, I loved every moment of it!"
+negative_text = "I couldn't stand this movie, it was terrible."
+print("Positive text sentiment:", predict_sentiment(positive_text))
+print("Negative text sentiment:", predict_sentiment(negative_text))
+import matplotlib.pyplot as plt
+# Plot training and validation accuracy
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+# Plot training and validation loss
+
+Page 17 of 21
+
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
